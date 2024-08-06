@@ -19,6 +19,7 @@ function operation() {
             'Depositar',
             'Sacar',
             'Transferência',
+            'Histórico de tranferências',
             'Sair'
         ]
     }])
@@ -36,6 +37,8 @@ function operation() {
             withdraw()
         } else if(action === 'Transferência') {
             transfer()
+        } else if(action === 'Histórico de tranferências') {
+            transferHistory()
         } else if (action === 'Sair') {
             console.log(chalk.bgBlue.black('Obrigado por usar o Account!'))
             process.exit()
@@ -72,12 +75,17 @@ function buildAccount() {
         if(existsSync(`account/${accountName}.json`)) {
             console.log(chalk.bgRed.black('Esta conta já existe, escolha outro nome!'))
             buildAccount()
-            return // para não ser executado repetidamente
+            return // so that it doesn't run repeatedly
+        }
+
+        const initialData = {
+            balance: 0,
+            history: [] 
         }
 
         writeFileSync(
             `account/${accountName}.json`,
-            '{"balance": 0}',
+            JSON.stringify(initialData),
             function(err) {
                 console.log(err)
             }
@@ -306,11 +314,14 @@ function transfer() {
                 const targetAccount = answer['targetAccount']
         
                 if(!checkAccount(targetAccount)) {
-                    console.log(chalk.bgRed.black(`Conta de destino não existe.`))
                     return operation()
                 }
 
                 const targetAccData = getAccount(targetAccount)
+
+                //add account name to objects
+                originAccData.accountName = originAccount
+                targetAccData.accountName = targetAccount
     
                 //performs the transfer
                 performsTransfer(originAccData, targetAccData, amount)
@@ -340,8 +351,71 @@ function transfer() {
 
 function performsTransfer(origin, target, amount) {
 
+    const transferDate = new Date().toISOString() // capture exact date and time a transfer is performed
+
     origin.balance -= amount
     target.balance += amount
+
+    const transferRecord = {
+        date: transferDate,
+        amount: amount,
+        type: 'Transferência enviada',
+        targetAccount: target.accountName
+    }
+
+    origin.history.push(transferRecord)
+
+    const receiveRecord = {
+        date: transferDate,
+        amount: amount,
+        type: 'Transferência recebida',
+        originAccount: origin.accountName
+    }
+
+    target.history.push(receiveRecord)
+}
+
+function transferHistory() {
+
+    inquirer.prompt([
+        {
+            name: 'accountName',
+            message: 'Qual o nome da sua conta?'
+        }
+    ])
+    .then((answer) => {
+
+        const accountName = answer['accountName']
+
+        if(noAccountsExist()) {
+            return createAccount()
+        } 
+
+        if(!checkAccount(accountName)) {
+            return transferHistory()
+        }
+
+        const account = getAccount(accountName)
+
+        if(account.history.length === 0) {
+
+            console.log(chalk.bgYellow.black(`Nenhuma tranferência registrada nesta conta.`))
+
+        } else {
+            console.log(chalk.bgBlue.black(`Histórico de tranferências de ${accountName}:`))
+
+            account.history.forEach(record => {
+
+                console.log(`${record.date}: ${record.type} de ${record.amount}$ ${record.targetAccount ? `para ${record.targetAccount}` : `de ${record.originAccount}`}`)
+
+            })
+
+        }
+
+        operation()
+
+    })
+    .catch((err) => console.log(err))
 
 }
 
